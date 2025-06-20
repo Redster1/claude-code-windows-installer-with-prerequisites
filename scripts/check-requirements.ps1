@@ -26,10 +26,23 @@ if (-not $isAdmin) {
     $result.Messages += "Administrator rights required"
 }
 
-# Check WSL
+# Check WSL - check both features and command availability
 try {
-    $wslStatus = & wsl --status 2>$null
-    if ($LASTEXITCODE -eq 0) {
+    # Check if WSL features are enabled
+    $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
+    $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
+    
+    # Check if wsl command works
+    $wslWorks = $false
+    try {
+        $null = & wsl --status 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $wslWorks = $true
+        }
+    } catch {}
+    
+    # WSL is considered installed if features are enabled AND command works
+    if ($wslFeature.State -eq "Enabled" -and $vmFeature.State -eq "Enabled" -and $wslWorks) {
         $result.WSLInstalled = $true
     }
 } catch {}
