@@ -72,7 +72,7 @@ Function CheckRequirements
 FunctionEnd
 
 Function InstallWSL2
-    DetailPrint "Installing WSL2..."
+    DetailPrint "Checking/Installing WSL2..."
     
     ; Before running the script, check if we're post-reboot
     ReadRegStr $0 HKCU "Software\ClaudeCode" "PostRebootStage"
@@ -81,9 +81,15 @@ Function InstallWSL2
     ${EndIf}
     
     nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -File "$INSTDIR\install-wsl2.ps1"'
-    Pop $0
-    Pop $1
+    Pop $0 ; Exit Code
+    Pop $1 ; Output String
     
+    ; First, check if it was already installed and we can just skip.
+    StrCmp $1 "WSL_ALREADY_INSTALLED" 0 +3
+        DetailPrint "WSL is already installed. Skipping."
+        Return
+    
+    ; If not skipped, handle the result of the installation attempt.
     ${If} $0 == 3010
         ; Set flag for post-reboot
         WriteRegStr HKCU "Software\ClaudeCode" "PostRebootStage" "WSLFeaturesEnabled"
@@ -100,6 +106,8 @@ Function InstallWSL2
     ${ElseIf} $0 != 0
         MessageBox MB_OK|MB_ICONSTOP "WSL2 installation failed: $1"
         Abort
+    ${Else}
+        DetailPrint "WSL has been successfully installed."
     ${EndIf}
 FunctionEnd
 
@@ -126,28 +134,44 @@ Function CheckSystemPage
 FunctionEnd
 
 Function SetupDebian
-    DetailPrint "Setting up Debian Linux..."
+    DetailPrint "Checking/Setting up Debian Linux..."
     
     nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -File "$INSTDIR\setup-debian.ps1"'
     Pop $0
     Pop $1
     
+    ; Check if Debian was already installed.
+    StrCmp $1 "DEBIAN_EXISTS" 0 +3
+        DetailPrint "Debian is already installed. Skipping."
+        Return
+        
+    ; Handle the installation result.
     ${If} $0 != 0
         MessageBox MB_OK|MB_ICONSTOP "Debian setup failed: $1"
         Abort
+    ${Else}
+        DetailPrint "Debian has been successfully installed."
     ${EndIf}
 FunctionEnd
 
 Function InstallTools
-    DetailPrint "Installing Node.js and Claude Code..."
+    DetailPrint "Checking/Installing Node.js and Claude Code..."
     
     nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -File "$INSTDIR\install-tools.ps1"'
     Pop $0
     Pop $1
     
+    ; Check if tools were already installed.
+    StrCmp $1 "TOOLS_ALREADY_INSTALLED" 0 +3
+        DetailPrint "Claude Code tools are already installed. Skipping."
+        Return
+        
+    ; Handle the installation result.
     ${If} $0 != 0
         MessageBox MB_OK|MB_ICONSTOP "Tools installation failed: $1"
         Abort
+    ${Else}
+        DetailPrint "Claude Code tools have been successfully installed."
     ${EndIf}
 FunctionEnd
 
