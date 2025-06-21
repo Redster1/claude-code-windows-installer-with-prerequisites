@@ -145,7 +145,7 @@ try {
     # Step 5: Install Debian
     Write-Output "Installing Debian Linux..."
     try {
-        & $wslPath --install -d Debian --no-launch
+        & $wslPath --install -d Debian
         $installExitCode = $LASTEXITCODE
         
         if ($installExitCode -ne 0) {
