@@ -35,7 +35,7 @@ try {
     $WshShell = New-Object -ComObject "WScript.Shell"
     $Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Claude Code.lnk")
     $Shortcut.TargetPath = $wslPath
-    $Shortcut.Arguments = "-d $targetDistro --cd `"$ProjectsFolder`" claude"
+    $Shortcut.Arguments = "-d $targetDistro -e bash -lc 'cd \"$ProjectsFolder\" && claude'"
     $Shortcut.WorkingDirectory = $ProjectsFolder
     $Shortcut.IconLocation = "$env:LOCALAPPDATA\ClaudeCode\claude-icon.ico"
     $Shortcut.Description = "Launch Claude Code in WSL"

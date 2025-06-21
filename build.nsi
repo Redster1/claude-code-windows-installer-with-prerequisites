@@ -41,6 +41,9 @@ Section "Main"
     File "templates\CLAUDE.md"
     File "assets\claude-icon.ico"
     
+    ; Fix PowerShell script encoding
+    nsExec::ExecToLog 'powershell.exe -Command "Get-ChildItem \"$INSTDIR\*.ps1\" | ForEach-Object { $content = Get-Content $_ -Raw; $content = $content -replace [char]0xFEFF, \"\"; Set-Content $_ -Value $content -Encoding ASCII -NoNewline }"'
+    
     ; Run installation steps
     Call CheckRequirements
     Call InstallWSL2

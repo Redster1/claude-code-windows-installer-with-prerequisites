@@ -107,7 +107,7 @@ try {
         
         try {
             # Try to run wsl --install to complete setup
-            & $wslSystem32 --install --no-distribution 2>$null
+            & $wslSystem32 --update 2>$null
             
             if ($LASTEXITCODE -eq 0) {
                 Write-Output "WSL setup completed"
