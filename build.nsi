@@ -44,7 +44,7 @@ Section "Main"
     ; Run installation steps
     Call CheckRequirements
     Call InstallWSL2
-    Call SetupAlpine
+    Call SetupDebian
     Call InstallTools
     Call CreateProjectsFolder
     Call CreateShortcuts
@@ -71,11 +71,20 @@ FunctionEnd
 Function InstallWSL2
     DetailPrint "Installing WSL2..."
     
+    ; Before running the script, check if we're post-reboot
+    ReadRegStr $0 HKCU "Software\ClaudeCode" "PostRebootStage"
+    ${If} $0 == ""
+        ; First run - no special handling needed
+    ${EndIf}
+    
     nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -File "$INSTDIR\install-wsl2.ps1"'
     Pop $0
     Pop $1
     
     ${If} $0 == 3010
+        ; Set flag for post-reboot
+        WriteRegStr HKCU "Software\ClaudeCode" "PostRebootStage" "WSLFeaturesEnabled"
+        
         StrCpy $RebootRequired "true"
         MessageBox MB_YESNO "WSL2 installation requires a reboot. Reboot now?" IDYES RebootNow
         Return
@@ -113,15 +122,15 @@ Function CheckSystemPage
     nsDialogs::Show
 FunctionEnd
 
-Function SetupAlpine
-    DetailPrint "Setting up Alpine Linux..."
+Function SetupDebian
+    DetailPrint "Setting up Debian Linux..."
     
-    nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -File "$INSTDIR\setup-alpine.ps1"'
+    nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -File "$INSTDIR\setup-debian.ps1"'
     Pop $0
     Pop $1
     
     ${If} $0 != 0
-        MessageBox MB_OK|MB_ICONSTOP "Alpine setup failed: $1"
+        MessageBox MB_OK|MB_ICONSTOP "Debian setup failed: $1"
         Abort
     ${EndIf}
 FunctionEnd
@@ -163,8 +172,14 @@ Function CreateShortcuts
 FunctionEnd
 
 Function .onInit
-    ; Initialize installer
-    ; Future: Add reboot continuation logic here if needed
+    ; Check if we're continuing after reboot
+    ReadRegStr $0 HKCU "Software\ClaudeCode" "PostRebootStage"
+    ${If} $0 == "WSLFeaturesEnabled"
+        ; Jump to WSL kernel installation - clear the flag
+        StrCpy $0 ""
+        WriteRegStr HKCU "Software\ClaudeCode" "PostRebootStage" ""
+        ; The installer will naturally continue from CheckRequirements
+    ${EndIf}
 FunctionEnd
 
 Function UpdateProgress

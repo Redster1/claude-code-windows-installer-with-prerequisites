@@ -1,0 +1,131 @@
+# Updated setup-alpine.ps1 - Waits for WSL to be ready
+
+param()
+
+try {
+    # Wait for WSL to be fully available (up to 30 seconds)
+    $attempts = 0
+    $wslReady = $false
+    
+    Write-Output "Waiting for WSL to be ready..."
+    while ($attempts -lt 15 -and -not $wslReady) {
+        try {
+            $null = wsl --status 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $wslReady = $true
+                break
+            }
+        } catch {}
+        
+        Start-Sleep -Seconds 2
+        $attempts++
+    }
+    
+    if (-not $wslReady) {
+        Write-Output "ERROR: WSL is not responding after 30 seconds"
+        exit 1
+    }
+    
+    # Check if Alpine already exists
+    $distros = wsl --list --quiet 2>$null
+    if ($distros -match "Alpine") {
+        Write-Output "ALPINE_EXISTS"
+        exit 0
+    }
+    
+    # Install Alpine
+    Write-Output "Installing Alpine Linux..."
+    wsl --install -d Alpine --no-launch
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Output "Failed to install Alpine. Exit code: $LASTEXITCODE"
+        exit 1
+    }
+    
+    # Wait for Alpine to appear in the list
+    $attempts = 0
+    $alpineReady = $false
+    
+    while ($attempts -lt 15 -and -not $alpineReady) {
+        $distros = wsl --list --quiet 2>$null
+        if ($distros -match "Alpine") {
+            $alpineReady = $true
+            break
+        }
+        Start-Sleep -Seconds 2
+        $attempts++
+    }
+    
+    if ($alpineReady) {
+        # Set as default
+        wsl --set-default Alpine
+        Write-Output "ALPINE_INSTALLED"
+        exit 0
+    } else {
+        Write-Output "Alpine installation timeout"
+        exit 1
+    }
+} catch {
+    Write-Output "ERROR: $_"
+    exit 1
+}
+
+# Updated install-tools.ps1 - Also waits for WSL
+
+param()
+
+$commands = @'
+#!/bin/sh
+# Update packages
+apk update
+apk add nodejs npm curl git
+
+# Install Claude Code globally
+npm install -g @anthropic-ai/claude-code
+
+# Verify installation
+claude --version
+'@
+
+try {
+    # Wait for WSL to be ready
+    $attempts = 0
+    $wslReady = $false
+    
+    while ($attempts -lt 10 -and -not $wslReady) {
+        try {
+            $null = wsl --status 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $wslReady = $true
+                break
+            }
+        } catch {}
+        Start-Sleep -Seconds 2
+        $attempts++
+    }
+    
+    if (-not $wslReady) {
+        Write-Output "ERROR: WSL is not available"
+        exit 1
+    }
+    
+    # Save script to temp file
+    $tempScript = "$env:TEMP\alpine-setup.sh"
+    $commands | Out-File -FilePath $tempScript -Encoding ASCII -NoNewline
+    
+    # Execute in Alpine
+    wsl -d Alpine --exec sh < $tempScript
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Output "TOOLS_INSTALLED"
+        exit 0
+    } else {
+        Write-Output "TOOLS_INSTALL_FAILED"
+        exit 1
+    }
+} catch {
+    Write-Output "ERROR: $_"
+    exit 1
+} finally {
+    Remove-Item $tempScript -ErrorAction SilentlyContinue
+}

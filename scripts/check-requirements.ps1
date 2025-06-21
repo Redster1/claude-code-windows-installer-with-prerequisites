@@ -32,14 +32,20 @@ try {
     $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
     $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
     
+    # Check if wsl.exe exists
+    $wslExePath = "$env:SystemRoot\System32\wsl.exe"
+    $wslExists = Test-Path $wslExePath
+    
     # Check if wsl command works
     $wslWorks = $false
-    try {
-        $null = & wsl --status 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            $wslWorks = $true
-        }
-    } catch {}
+    if ($wslExists) {
+        try {
+            $null = & $wslExePath --status 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $wslWorks = $true
+            }
+        } catch {}
+    }
     
     # WSL is considered installed if features are enabled AND command works
     if ($wslFeature.State -eq "Enabled" -and $vmFeature.State -eq "Enabled" -and $wslWorks) {

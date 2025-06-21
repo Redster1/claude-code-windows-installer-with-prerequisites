@@ -1,0 +1,124 @@
+# install-wsl2.ps1 - Complete automated WSL installation
+
+param()
+
+try {
+    # Check if WSL features are enabled
+    $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
+    $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
+    
+    # Check if wsl.exe exists and works
+    $wslWorks = $false
+    try {
+        $null = wsl --status 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $wslWorks = $true
+        }
+    } catch {}
+    
+    # If WSL works, we're done
+    if ($wslWorks) {
+        Write-Output "WSL_ALREADY_INSTALLED"
+        exit 0
+    }
+    
+    # Step 1: Enable features if needed
+    $rebootNeeded = $false
+    
+    if ($wslFeature.State -ne "Enabled") {
+        Write-Output "Enabling WSL feature..."
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -All -NoRestart
+        $rebootNeeded = $true
+    }
+    
+    if ($vmFeature.State -ne "Enabled") {
+        Write-Output "Enabling Virtual Machine Platform..."
+        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -All -NoRestart
+        $rebootNeeded = $true
+    }
+    
+    if ($rebootNeeded) {
+        Write-Output "REBOOT_REQUIRED"
+        exit 3010
+    }
+    
+    # Step 2: Features are enabled but WSL doesn't work - install WSL app package
+    Write-Output "Installing WSL application package..."
+    
+    # Download the official WSL package from Microsoft
+    $wslPackageUrl = "https://aka.ms/wsl-app-preview"  # This redirects to the latest WSL msixbundle
+    $wslPackagePath = "$env:TEMP\wsl-app.msixbundle"
+    
+    Write-Output "Downloading WSL package..."
+    try {
+        # Use .NET WebClient for more reliable download
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($wslPackageUrl, $wslPackagePath)
+    } catch {
+        Write-Output "Failed to download WSL package: $_"
+        exit 1
+    }
+    
+    # Install the package using Add-AppxPackage
+    Write-Output "Installing WSL package..."
+    try {
+        Add-AppxPackage -Path $wslPackagePath -ErrorAction Stop
+        Write-Output "WSL package installed successfully"
+    } catch {
+        Write-Output "Failed to install WSL package: $_"
+        
+        # Fallback: Try using dism to install
+        Write-Output "Attempting alternative installation method..."
+        $dismResult = & dism.exe /online /add-provisionedappxpackage /packagepath:$wslPackagePath /skiplicense
+        if ($LASTEXITCODE -ne 0) {
+            Write-Output "Alternative installation also failed"
+            exit 1
+        }
+    } finally {
+        Remove-Item $wslPackagePath -ErrorAction SilentlyContinue
+    }
+    
+    # Step 3: Install WSL2 kernel update
+    Write-Output "Installing WSL2 kernel update..."
+    $kernelUrl = "https://wslstorestorage.blob.core.windows.net/wslblob/wsl_update_x64.msi"
+    $kernelPath = "$env:TEMP\wsl_update_x64.msi"
+    
+    try {
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($kernelUrl, $kernelPath)
+        
+        $process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $kernelPath, "/quiet", "/norestart" -Wait -PassThru
+        
+        if ($process.ExitCode -ne 0) {
+            Write-Output "WSL2 kernel installation failed but continuing..."
+        }
+    } catch {
+        Write-Output "Kernel update failed but continuing: $_"
+    } finally {
+        Remove-Item $kernelPath -ErrorAction SilentlyContinue
+    }
+    
+    # Step 4: Set WSL 2 as default version
+    Start-Sleep -Seconds 3  # Give Windows a moment to register the new installation
+    
+    try {
+        wsl --set-default-version 2 2>$null
+    } catch {}
+    
+    # Verify installation
+    try {
+        $null = wsl --status 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Output "WSL_INSTALLED"
+            exit 0
+        }
+    } catch {}
+    
+    # If we get here, installation might need a reboot to fully activate
+    Write-Output "WSL_INSTALLED_NEEDS_ACTIVATION"
+    exit 0
+    
+} catch {
+    Write-Output "ERROR: $_"
+    exit 1
+}

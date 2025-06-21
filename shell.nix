@@ -14,11 +14,15 @@ pkgs.mkShell {
     # PowerShell for testing scripts (if available)
     powershell
     
+    # PowerShell linting and formatting tools
+    nodePackages.prettier
+    
     # Utilities
     file
     unzip
     wget
     curl
+    jq
   ];
 
   shellHook = ''
@@ -27,8 +31,10 @@ pkgs.mkShell {
     echo "  - makensis (NSIS compiler)"
     echo "  - wine (Windows compatibility layer)"
     echo "  - make (build automation)"
+    echo "  - powershell (PowerShell Core for script validation)"
     echo ""
     echo "To build the installer, run: make build"
+    echo "To validate PowerShell syntax: pwsh -NoProfile -Command \"& './scripts/scriptname.ps1' -WhatIf\""
     echo ""
   '';
 }

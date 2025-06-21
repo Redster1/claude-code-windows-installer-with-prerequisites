@@ -16,26 +16,15 @@ try {
     foreach ($path in $wslPaths) {
         if (Test-Path $path) {
             $wslPath = $path
-            Write-Host "Using WSL at: $wslPath"
+            Write-Output "Using WSL at: $wslPath"
             break
         }
     }
     
-    # Determine which Linux distribution is installed
-    $targetDistro = "Debian"
-    try {
-        $distros = & $wslPath --list --quiet 2>$null
-        if ($distros -match "Ubuntu" -and -not ($distros -match "Debian")) {
-            $targetDistro = "Ubuntu"
-        }
-    } catch {
-        # Default to Debian if we can't determine
-    }
-    
-    $WshShell = New-Object -ComObject "WScript.Shell"
+    $WshShell = New-Object -ComObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Claude Code.lnk")
     $Shortcut.TargetPath = $wslPath
-    $Shortcut.Arguments = "-d $targetDistro --cd `"$ProjectsFolder`" claude"
+    $Shortcut.Arguments = "-d Alpine --cd `"$ProjectsFolder`" claude"
     $Shortcut.WorkingDirectory = $ProjectsFolder
     $Shortcut.IconLocation = "$env:LOCALAPPDATA\ClaudeCode\claude-icon.ico"
     $Shortcut.Description = "Launch Claude Code in WSL"

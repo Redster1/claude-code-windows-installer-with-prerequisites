@@ -1,0 +1,328 @@
+# Fixed install-wsl2.ps1
+
+```powershell
+# Install WSL2 - robust approach for systems without WSL
+param()
+
+try {
+    # First check if WSL Windows feature is enabled
+    $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
+    $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
+    
+    # Check if wsl.exe exists in system32
+    $wslExePath = "$env:SystemRoot\System32\wsl.exe"
+    $wslExists = Test-Path $wslExePath
+    
+    # Check if wsl command works (if exe exists)
+    $wslWorks = $false
+    if ($wslExists) {
+        try {
+            $null = & $wslExePath --status 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $wslWorks = $true
+            }
+        } catch {}
+    }
+    
+    Write-Output "WSL Feature State: $($wslFeature.State)"
+    Write-Output "VM Platform State: $($vmFeature.State)"
+    Write-Output "WSL.exe exists: $wslExists"
+    Write-Output "WSL command works: $wslWorks"
+    
+    # If everything works, we're done
+    if ($wslWorks) {
+        Write-Output "WSL_ALREADY_INSTALLED"
+        exit 0
+    }
+    
+    # If features are not enabled, enable them
+    $rebootNeeded = $false
+    
+    if ($wslFeature.State -ne "Enabled") {
+        Write-Output "Enabling WSL feature..."
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -All -NoRestart
+        $rebootNeeded = $true
+    }
+    
+    if ($vmFeature.State -ne "Enabled") {
+        Write-Output "Enabling Virtual Machine Platform..."
+        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -All -NoRestart
+        $rebootNeeded = $true
+    }
+    
+    if ($rebootNeeded) {
+        Write-Output "REBOOT_REQUIRED"
+        exit 3010
+    }
+    
+    # If features are enabled but wsl doesn't exist or work, we need to install WSL2 kernel
+    if ($wslFeature.State -eq "Enabled" -and $vmFeature.State -eq "Enabled" -and (-not $wslWorks)) {
+        Write-Output "Features enabled but WSL not working. Installing WSL2 kernel update..."
+        
+        # Download WSL2 kernel update
+        $kernelUrl = "https://wslstorestorage.blob.core.windows.net/wslblob/wsl_update_x64.msi"
+        $kernelPath = "$env:TEMP\wsl_update_x64.msi"
+        
+        Write-Output "Downloading WSL2 kernel from $kernelUrl..."
+        try {
+            Invoke-WebRequest -Uri $kernelUrl -OutFile $kernelPath -UseBasicParsing
+        } catch {
+            Write-Output "Failed to download WSL2 kernel: $_"
+            exit 1
+        }
+        
+        # Install the kernel update
+        Write-Output "Installing WSL2 kernel update..."
+        $process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $kernelPath, "/quiet", "/norestart" -Wait -PassThru
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Output "WSL2 kernel installed successfully"
+            
+            # Clean up
+            Remove-Item $kernelPath -ErrorAction SilentlyContinue
+            
+            # Try to set WSL2 as default version
+            try {
+                & $wslExePath --set-default-version 2 2>$null
+            } catch {}
+            
+            Write-Output "WSL_INSTALLED"
+            exit 0
+        } else {
+            Write-Output "WSL2 kernel installation failed with exit code: $($process.ExitCode)"
+            exit 1
+        }
+    }
+    
+    # If we get here, something unexpected happened
+    Write-Output "Unexpected state - WSL installation incomplete"
+    exit 1
+    
+} catch {
+    Write-Output "ERROR: $_"
+    exit 1
+}
+```
+
+# Fixed check-requirements.ps1
+
+```powershell
+# Simple requirements check - returns JSON for NSIS to parse
+param()
+
+$result = @{
+    Success = $true
+    WindowsValid = $false
+    IsAdmin = $false
+    WSLInstalled = $false
+    Messages = @()
+}
+
+# Check Windows version
+$build = [System.Environment]::OSVersion.Version.Build
+if ($build -ge 19041) {
+    $result.WindowsValid = $true
+} else {
+    $result.Success = $false
+    $result.Messages += "Windows 10 version 2004 or later required"
+}
+
+# Check admin rights
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$result.IsAdmin = $isAdmin
+if (-not $isAdmin) {
+    $result.Success = $false
+    $result.Messages += "Administrator rights required"
+}
+
+# Check WSL - check both features and command availability
+try {
+    # Check if WSL features are enabled
+    $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
+    $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
+    
+    # Check if wsl.exe exists
+    $wslExePath = "$env:SystemRoot\System32\wsl.exe"
+    $wslExists = Test-Path $wslExePath
+    
+    # Check if wsl command works
+    $wslWorks = $false
+    if ($wslExists) {
+        try {
+            $null = & $wslExePath --status 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $wslWorks = $true
+            }
+        } catch {}
+    }
+    
+    # WSL is considered installed if features are enabled AND command works
+    if ($wslFeature.State -eq "Enabled" -and $vmFeature.State -eq "Enabled" -and $wslWorks) {
+        $result.WSLInstalled = $true
+    }
+} catch {}
+
+# Output JSON
+$result | ConvertTo-Json -Compress
+```
+
+# Fixed setup-alpine.ps1
+
+```powershell
+# Setup Alpine Linux
+param()
+
+try {
+    # Use full path to wsl.exe to avoid PATH issues
+    $wslExe = "$env:SystemRoot\System32\wsl.exe"
+    
+    if (-not (Test-Path $wslExe)) {
+        Write-Output "ERROR: WSL not found at $wslExe"
+        exit 1
+    }
+    
+    # Check if Alpine already exists
+    $distros = & $wslExe --list --quiet 2>$null
+    if ($distros -match "Alpine") {
+        Write-Output "ALPINE_EXISTS"
+        exit 0
+    }
+    
+    # Install Alpine
+    Write-Output "Installing Alpine Linux..."
+    & $wslExe --install -d Alpine
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Output "Failed to install Alpine. Exit code: $LASTEXITCODE"
+        exit 1
+    }
+    
+    # Wait for installation to complete
+    Write-Output "Waiting for Alpine installation to complete..."
+    $maxWait = 30
+    $waited = 0
+    while ($waited -lt $maxWait) {
+        Start-Sleep -Seconds 2
+        $waited += 2
+        
+        $distros = & $wslExe --list --quiet 2>$null
+        if ($distros -match "Alpine") {
+            break
+        }
+    }
+    
+    # Verify Alpine is installed
+    $distros = & $wslExe --list --quiet 2>$null
+    if ($distros -match "Alpine") {
+        # Set as default
+        & $wslExe --set-default Alpine
+        Write-Output "ALPINE_INSTALLED"
+        exit 0
+    } else {
+        Write-Output "Alpine installation verification failed"
+        exit 1
+    }
+} catch {
+    Write-Output "ERROR: $_"
+    exit 1
+}
+```
+
+# Fixed install-tools.ps1
+
+```powershell
+# Install Node.js and Claude Code in Alpine
+param()
+
+$commands = @'
+#!/bin/sh
+# Update packages
+apk update
+apk add nodejs npm curl git
+
+# Install Claude Code globally
+npm install -g @anthropic-ai/claude-code
+
+# Verify installation
+claude --version
+'@
+
+try {
+    # Use full path to wsl.exe
+    $wslExe = "$env:SystemRoot\System32\wsl.exe"
+    
+    if (-not (Test-Path $wslExe)) {
+        Write-Output "ERROR: WSL not found at $wslExe"
+        exit 1
+    }
+    
+    # Save script to temp file
+    $tempScript = "$env:TEMP\alpine-setup.sh"
+    $commands | Out-File -FilePath $tempScript -Encoding ASCII -NoNewline
+    
+    # Execute in Alpine
+    & $wslExe -d Alpine --exec sh < $tempScript
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Output "TOOLS_INSTALLED"
+        exit 0
+    } else {
+        Write-Output "TOOLS_INSTALL_FAILED"
+        exit 1
+    }
+} catch {
+    Write-Output "ERROR: $_"
+    exit 1
+} finally {
+    Remove-Item $tempScript -ErrorAction SilentlyContinue
+}
+```
+
+# Additional fix for build.nsi - Add better state tracking
+
+Add this to the NSIS script to handle post-reboot state better:
+
+```nsis
+Function .onInit
+    ; Check if we're continuing after reboot
+    ReadRegStr $0 HKCU "Software\ClaudeCode" "PostRebootStage"
+    ${If} $0 == "WSLFeaturesEnabled"
+        ; Jump to WSL kernel installation
+        StrCpy $0 ""
+        WriteRegStr HKCU "Software\ClaudeCode" "PostRebootStage" ""
+        ; The installer will naturally continue from CheckRequirements
+    ${EndIf}
+FunctionEnd
+
+Function InstallWSL2
+    DetailPrint "Installing WSL2..."
+    
+    ; Before running the script, set a flag if we're post-reboot
+    ReadRegStr $0 HKCU "Software\ClaudeCode" "PostRebootStage"
+    ${If} $0 == ""
+        ; First run
+    ${EndIf}
+    
+    nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -File "$INSTDIR\install-wsl2.ps1"'
+    Pop $0
+    Pop $1
+    
+    ${If} $0 == 3010
+        ; Set flag for post-reboot
+        WriteRegStr HKCU "Software\ClaudeCode" "PostRebootStage" "WSLFeaturesEnabled"
+        
+        StrCpy $RebootRequired "true"
+        MessageBox MB_YESNO "WSL2 installation requires a reboot. Reboot now?" IDYES RebootNow
+        Return
+        
+        RebootNow:
+        ; Set run-once registry key to continue after reboot
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" \
+                    "ClaudeCodeInstaller" "$EXEPATH"
+        Reboot
+    ${ElseIf} $0 != 0
+        MessageBox MB_OK|MB_ICONSTOP "WSL2 installation failed: $1"
+        Abort
+    ${EndIf}
+FunctionEnd
+```
