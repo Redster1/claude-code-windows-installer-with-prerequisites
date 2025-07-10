@@ -7,16 +7,52 @@ try {
     $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
     $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
     
-    # Check if wsl.exe exists and works
+    # Check if wsl.exe exists and works functionally (with timeout)
     $wslWorks = $false
     try {
-        $null = wsl --status 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            $wslWorks = $true
+        Write-Output "Testing WSL functionality..."
+        
+        # Test with timeout to avoid hanging on broken WSL
+        $job = Start-Job -ScriptBlock {
+            try {
+                # First check if wsl responds
+                $statusResult = & wsl.exe --status 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    return "STATUS_FAILED"
+                }
+                
+                # More importantly, test if it can actually execute commands
+                $execResult = & wsl.exe --exec echo "functional_test" 2>&1
+                if ($LASTEXITCODE -eq 0 -and $execResult -match "functional_test") {
+                    return "FUNCTIONAL"
+                } else {
+                    return "EXEC_FAILED"
+                }
+            } catch {
+                return "ERROR"
+            }
         }
-    } catch {}
+        
+        $result = Wait-Job -Job $job -Timeout 10
+        if ($result) {
+            $output = Receive-Job -Job $job
+            Remove-Job -Job $job -Force
+            
+            if ($output -eq "FUNCTIONAL") {
+                $wslWorks = $true
+                Write-Output "WSL is functional"
+            } else {
+                Write-Output "WSL test failed: $output"
+            }
+        } else {
+            Remove-Job -Job $job -Force
+            Write-Output "WSL test timed out (probably broken/hanging)"
+        }
+    } catch {
+        Write-Output "WSL test error: $_"
+    }
     
-    # If WSL works, we're done
+    # If WSL works functionally, we're done
     if ($wslWorks) {
         Write-Output "WSL_ALREADY_INSTALLED"
         exit 0
@@ -50,7 +86,7 @@ try {
     
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $kernelUrl -OutFile $kernelPath -UseBasicParsing
+        Invoke-WebRequest -Uri $kernelUrl -OutFile $kernelPath -UseBasicParsing -TimeoutSec 30
         
         $process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "`"$kernelPath`"", "/quiet", "/norestart" -Wait -PassThru
         
@@ -73,7 +109,12 @@ try {
         Write-Output "Installing WSL using winget..."
         try {
             # Accept source agreements first
+            Write-Output "Updating winget sources..."
             & $wingetPath source update --accept-source-agreements
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Output "Winget source update failed, but continuing with install attempt..."
+            }
             
             # Install WSL from Microsoft Store
             $wingetResult = & $wingetPath install --id 9P9TQF7MRM4R --source msstore --accept-package-agreements --accept-source-agreements 2>&1
@@ -84,11 +125,34 @@ try {
                 # Give it time to register
                 Start-Sleep -Seconds 5
                 
-                # Try to verify
-                $null = wsl --status 2>$null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Output "WSL_INSTALLED"
-                    exit 0
+                # Try to verify with functional test
+                $job = Start-Job -ScriptBlock {
+                    try {
+                        $execResult = & wsl.exe --exec echo "install_test" 2>&1
+                        if ($LASTEXITCODE -eq 0 -and $execResult -match "install_test") {
+                            return "FUNCTIONAL"
+                        } else {
+                            return "NOT_FUNCTIONAL"
+                        }
+                    } catch {
+                        return "ERROR"
+                    }
+                }
+                
+                $result = Wait-Job -Job $job -Timeout 8
+                if ($result) {
+                    $output = Receive-Job -Job $job
+                    Remove-Job -Job $job -Force
+                    
+                    if ($output -eq "FUNCTIONAL") {
+                        Write-Output "WSL_INSTALLED"
+                        exit 0
+                    } else {
+                        Write-Output "WSL installed but not functional: $output"
+                    }
+                } else {
+                    Remove-Job -Job $job -Force
+                    Write-Output "WSL verification timed out"
                 }
             } else {
                 Write-Output "Winget installation failed: $wingetResult"
