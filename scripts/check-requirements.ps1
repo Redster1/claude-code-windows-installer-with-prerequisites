@@ -1,21 +1,21 @@
-# Simple requirements check - returns JSON for NSIS to parse
+# Native Windows requirements check - returns JSON for NSIS to parse
 param()
 
 $result = @{
     Success = $true
     WindowsValid = $false
     IsAdmin = $false
-    WSLInstalled = $false
+    WingetAvailable = $false
     Messages = @()
 }
 
-# Check Windows version
+# Check Windows version (1809 / build 17763 or later for native claude-code)
 $build = [System.Environment]::OSVersion.Version.Build
-if ($build -ge 19041) {
+if ($build -ge 17763) {
     $result.WindowsValid = $true
 } else {
     $result.Success = $false
-    $result.Messages += "Windows 10 version 2004 or later required"
+    $result.Messages += "Windows 10 version 1809 (build 17763) or later required"
 }
 
 # Check admin rights
@@ -26,32 +26,52 @@ if (-not $isAdmin) {
     $result.Messages += "Administrator rights required"
 }
 
-# Check WSL - check both features and command availability
+# Check winget availability - critical for native Windows installation
 try {
-    # Check if WSL features are enabled
-    $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
-    $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
+    # Try to find winget in common locations
+    $wingetPaths = @(
+        "$env:LocalAppData\Microsoft\WindowsApps\winget.exe",
+        "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller*\winget.exe",
+        "winget.exe"  # In PATH
+    )
     
-    # Check if wsl.exe exists
-    $wslExePath = "$env:SystemRoot\System32\wsl.exe"
-    $wslExists = Test-Path $wslExePath
+    $wingetFound = $false
+    $wingetPath = $null
     
-    # Check if wsl command works
-    $wslWorks = $false
-    if ($wslExists) {
+    foreach ($path in $wingetPaths) {
+        if ($path -like "*WindowsApps*") {
+            # Handle wildcard path for DesktopAppInstaller
+            $resolvedPaths = Get-ChildItem -Path ($path -replace "\*", "*") -ErrorAction SilentlyContinue
+            if ($resolvedPaths) {
+                $wingetPath = $resolvedPaths[0].FullName
+                $wingetFound = $true
+                break
+            }
+        } elseif (Get-Command $path -ErrorAction SilentlyContinue) {
+            $wingetPath = $path
+            $wingetFound = $true
+            break
+        }
+    }
+    
+    # Test if winget actually works
+    if ($wingetFound) {
         try {
-            $null = & $wslExePath --status 2>$null
+            $null = & $wingetPath --version 2>$null
             if ($LASTEXITCODE -eq 0) {
-                $wslWorks = $true
+                $result.WingetAvailable = $true
             }
         } catch {}
     }
     
-    # WSL is considered installed if features are enabled AND command works
-    if ($wslFeature.State -eq "Enabled" -and $vmFeature.State -eq "Enabled" -and $wslWorks) {
-        $result.WSLInstalled = $true
+    if (-not $result.WingetAvailable) {
+        $result.Success = $false
+        $result.Messages += "Windows Package Manager (winget) is required but not available. Please install from Microsoft Store or update Windows."
     }
-} catch {}
+} catch {
+    $result.Success = $false
+    $result.Messages += "Failed to check winget availability: $($_.Exception.Message)"
+}
 
 # Output JSON
 $result | ConvertTo-Json -Compress
