@@ -4,6 +4,7 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "x64.nsh"
+!include "FileFunc.nsh"
 
 Name "Claude Code Native Windows"
 OutFile "output\ClaudeCodeInstaller.exe"
@@ -24,7 +25,7 @@ Var ProjectsFolder
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
 Page custom CheckSystemPage
-Page custom SelectProjectsFolderPage
+Page custom SelectProjectsFolderPage SelectProjectsFolderPageLeave
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
@@ -100,16 +101,47 @@ Function CheckSystemStatus
 FunctionEnd
 
 
+; Variables for dialog controls
+Var ProjectsFolderControl
+Var BrowseButton
+
 Function SelectProjectsFolderPage
     nsDialogs::Create 1018
     Pop $0
     
     ${NSD_CreateLabel} 0 0 100% 20u "Select location for Claude Code Projects folder:"
     ${NSD_CreateDirRequest} 0 25u 80% 14u "$DOCUMENTS\Claude Code Projects"
-    Pop $ProjectsFolder
+    Pop $ProjectsFolderControl
     ${NSD_CreateBrowseButton} 82% 25u 18% 14u "Browse..."
+    Pop $BrowseButton
+    
+    ; Set up browse button callback
+    ${NSD_OnClick} $BrowseButton BrowseForFolder
     
     nsDialogs::Show
+FunctionEnd
+
+Function SelectProjectsFolderPageLeave
+    ; Capture the user's selection
+    ${NSD_GetText} $ProjectsFolderControl $ProjectsFolder
+    
+    ; Validate the selection
+    ${If} $ProjectsFolder == ""
+        MessageBox MB_OK|MB_ICONSTOP "Please select a valid folder location."
+        Abort
+    ${EndIf}
+    
+    ; Ensure the path ends properly
+    ${GetParent} "$ProjectsFolder\." $0
+    StrCpy $ProjectsFolder $0
+FunctionEnd
+
+Function BrowseForFolder
+    nsDialogs::SelectFolderDialog "Select Projects Folder" $ProjectsFolder
+    Pop $0
+    ${If} $0 != ""
+        ${NSD_SetText} $ProjectsFolderControl $0
+    ${EndIf}
 FunctionEnd
 
 
@@ -151,13 +183,40 @@ Function InstallTools
 FunctionEnd
 
 Function CreateProjectsFolder
-    DetailPrint "Creating projects folder..."
+    DetailPrint "Creating projects folder: $ProjectsFolder"
     
-    ; Create the projects folder
+    ; Validate ProjectsFolder is set
+    ${If} $ProjectsFolder == ""
+        DetailPrint "ERROR: No projects folder specified"
+        MessageBox MB_OK|MB_ICONSTOP "Internal error: No projects folder specified."
+        Abort
+    ${EndIf}
+    
+    ; Create the projects folder with error checking
     CreateDirectory "$ProjectsFolder"
+    ${IfNot} ${FileExists} "$ProjectsFolder"
+        DetailPrint "ERROR: Failed to create directory: $ProjectsFolder"
+        MessageBox MB_OK|MB_ICONSTOP "Failed to create projects folder:$\n$ProjectsFolder$\n$\nPlease check permissions and disk space."
+        Abort
+    ${EndIf}
+    DetailPrint "Projects folder created successfully: $ProjectsFolder"
     
-    ; Copy CLAUDE.md template
+    ; Verify source CLAUDE.md exists
+    ${IfNot} ${FileExists} "$INSTDIR\CLAUDE.md"
+        DetailPrint "WARNING: CLAUDE.md template not found at: $INSTDIR\CLAUDE.md"
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Warning: CLAUDE.md template file missing.$\n$\nInstallation will continue but projects folder will not have the template file."
+        Return
+    ${EndIf}
+    
+    ; Copy CLAUDE.md template with error checking
+    ClearErrors
     CopyFiles "$INSTDIR\CLAUDE.md" "$ProjectsFolder\CLAUDE.md"
+    ${If} ${Errors}
+        DetailPrint "WARNING: Failed to copy CLAUDE.md template"
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Warning: Could not copy CLAUDE.md template to projects folder.$\n$\nYou may need to create this file manually."
+    ${Else}
+        DetailPrint "CLAUDE.md template copied successfully"
+    ${EndIf}
 FunctionEnd
 
 Function CreateShortcuts

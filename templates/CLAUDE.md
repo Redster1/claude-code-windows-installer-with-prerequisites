@@ -1,43 +1,16 @@
-# Claude Code Projects
+- This is a read-only repo. You may not edit any files.  You may read the files here and you may create new files. 
+- There are two exceptions. 
+	- One, if you created it, you can edit it. 
+		- Try to leave a ultra-concise note (either in the body or in yaml or the name of the directory) so you'll remember that you made the file. Like a dir named Claude Notes or in the body of a note "Author: Claude".
+	- Two, you may edit the files if asked by the user if necessary. If asked to edit a file that you have not created, ask the user if you should edit the original or if you should make a copy first and edit that. (By default, you should put them in a directory "Claude Edits" unless the user says otherwise or context strongly indicates that it would be in a different directory that the user is already working in.  (You don't want these files mixed into the read-only repo unless the user wants that.)
+- Do not edit any other files!
+- Unless otherwise instructed, place all files you create in their own folder.
+- So, if you're not using grep or some other tool like that, searching for content in those will make the most sense first.
+- You have access to tools like grep and sed and find and curl, but not ripgrep (rg).
+	- If you install other tools, please update this file.  
+- If a user has to correct you or tell you where something is or remind you of a tool or indicates that they don't like or want aspects of these instructions, feel free to suggest a modification to this document and if they approve, modify this.  But don't suggest this unless this user has indicated or keeps indicating something specific.
+- Do not change any files that you didn't create unless expressly asked by the user!
+- When the user asks a question about the contents of the repository, please be thorough in looking for an answer.  Don't make up an answer and be willing to say that it doesn't look like any content in the repo answers the question.  
+- If I say something that appears to be wrong, please correct me.  If I insist, please update your claude.md about the fact. I am a lawyer and am insisting for a reason.
+- Feel free to add things to this claude.md file (or others) or even create new files that explain where to find things that will help you in the future.  If you create a file to help you, you'll probably want to mention it in here and if it's something you should reference all of the time or only for certain queries (it likely will only be relevant for only some queries).
 
-Welcome to Claude Code! This folder is set up for your Claude Code projects.
-
-## Getting Started
-
-Claude Code has been installed and configured on your system. You can:
-
-1. **Start a new project**: Simply run `claude` in any directory to begin
-2. **Continue working**: Claude Code remembers your project context between sessions
-3. **Access your files**: All your project files are stored in this folder
-
-## Helpful Commands
-
-- `claude` - Start Claude Code in the current directory
-- `claude --help` - Show available options and commands
-- `claude --version` - Check your current version
-
-## Project Organization
-
-Consider organizing your projects in subfolders:
-- `documents/` - Document analysis and writing projects
-- `research/` - Research and analysis tasks
-- `coding/` - Software development projects
-- `templates/` - Reusable project templates
-
-## Support
-
-If you need help:
-- Type `/help` within Claude Code for assistance
-- Visit the documentation at https://docs.anthropic.com/claude-code
-- Report issues at https://github.com/anthropics/claude-code/issues
-
-## Tips for Legal Professionals
-
-- **Document Review**: Upload contracts, agreements, or legal documents for analysis
-- **Research**: Ask Claude to help research legal precedents or regulations
-- **Writing**: Draft legal documents, memos, or correspondence
-- **Case Analysis**: Analyze case files and extract key information
-
-Remember: Claude Code is a tool to assist with your work, but always review and verify any legal advice or analysis with your professional judgment.
-
-Happy coding with Claude!

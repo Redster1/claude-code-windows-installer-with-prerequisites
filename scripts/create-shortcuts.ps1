@@ -73,36 +73,36 @@ Write-Host ''
     # Set working directory
     $Shortcut.WorkingDirectory = $ProjectsFolder
     
-    # Set icon
-    $Shortcut.IconLocation = "$env:LOCALAPPDATA\ClaudeCode\claude-icon.ico"
+    # Set icon (optional - don't fail if icon missing)
+    $iconPath = "$env:LOCALAPPDATA\ClaudeCode\claude-icon.ico"
+    if (Test-Path $iconPath) {
+        try {
+            $Shortcut.IconLocation = $iconPath
+            Write-Output "Icon set to: $iconPath"
+        } catch {
+            Write-Output "WARNING: Could not set icon: $_"
+        }
+    } else {
+        Write-Output "WARNING: Icon file not found at: $iconPath"
+    }
     
     # Set description
     $Shortcut.Description = "Launch Claude Code in $powershellName"
     
     # Save the shortcut
-    $Shortcut.Save()
+    try {
+        $Shortcut.Save()
+        Write-Output "Shortcut saved successfully to: $env:USERPROFILE\Desktop\Claude Code.lnk"
+    } catch {
+        Write-Output "ERROR: Failed to save shortcut: $_"
+        throw
+    }
     
     Write-Output "Desktop shortcut created successfully"
     Write-Output "Target: $powershellPath"
     Write-Output "Working Directory: $ProjectsFolder"
     Write-Output "Uses: $powershellName"
     
-    # Also create a Start Menu shortcut
-    try {
-        $startMenuPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
-        $startMenuShortcut = $WshShell.CreateShortcut("$startMenuPath\Claude Code.lnk")
-        $startMenuShortcut.TargetPath = $powershellPath
-        $startMenuShortcut.Arguments = $Shortcut.Arguments
-        $startMenuShortcut.WorkingDirectory = $ProjectsFolder
-        $startMenuShortcut.IconLocation = "$env:LOCALAPPDATA\ClaudeCode\claude-icon.ico"
-        $startMenuShortcut.Description = "Launch Claude Code in $powershellName"
-        $startMenuShortcut.Save()
-        
-        Write-Output "Start Menu shortcut created successfully"
-    } catch {
-        Write-Output "WARNING: Could not create Start Menu shortcut: $_"
-        # Don't fail the whole process for this
-    }
     
     Write-Output "SHORTCUT_CREATED"
     exit 0
