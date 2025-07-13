@@ -52,13 +52,13 @@ try {
     # Create PowerShell arguments to:
     # 1. Set location to projects folder
     # 2. Show a welcome message
-    # 3. Keep the shell open with NoExit
+    # 3. Automatically start Claude Code
     $psCommand = @"
 Set-Location '$ProjectsFolder'; 
 Write-Host 'Claude Code for Windows' -ForegroundColor Green; 
-Write-Host 'Ready to use claude command in: $ProjectsFolder' -ForegroundColor Cyan; 
-Write-Host 'Type: claude --help for usage information' -ForegroundColor Yellow; 
-Write-Host ''
+Write-Host 'Starting Claude Code in: $ProjectsFolder' -ForegroundColor Cyan; 
+Write-Host ''; 
+claude
 "@
     
     # Build arguments for PowerShell
